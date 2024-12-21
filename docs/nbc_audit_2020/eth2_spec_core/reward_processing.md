@@ -22,7 +22,7 @@ Writeup:
 *However, around 11 AM UTC on May 15th , it had been observed that Schlesi had
 been nearly 50 epochs away from finality. While the initial cause of the finality delay has not been ascertained, they’re not rare in a test
 network where participants are not obligated/incentivized to keep their
-validators running. The lack of finality eventually lead to instability
+validators running. The lack of finality eventually led to instability
 in the chain, causing several temporary forks in the network.*
 
 ![schlesi_rewards.png](./schlesi_rewards.png)
