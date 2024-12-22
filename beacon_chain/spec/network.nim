@@ -37,7 +37,7 @@ const
   # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/_features/eip7594/p2p-interface.md#configuration
   MAX_REQUEST_DATA_COLUMN_SIDECARS*: uint64 =
     MAX_REQUEST_BLOCKS_DENEB * NUMBER_OF_COLUMNS
-  
+
   defaultEth2TcpPort* = 9000
   defaultEth2TcpPortDesc* = $defaultEth2TcpPort
 
@@ -47,6 +47,7 @@ const
 
   enrAttestationSubnetsField* = "attnets"
   enrSyncSubnetsField* = "syncnets"
+  enrCustodySubnetCountField* = "csc"
   enrForkIdField* = "eth2"
 
 template eth2Prefix(forkDigest: ForkDigest): string =
@@ -71,7 +72,7 @@ func getAggregateAndProofsTopic*(forkDigest: ForkDigest): string =
 func getBlsToExecutionChangeTopic*(forkDigest: ForkDigest): string =
   eth2Prefix(forkDigest) & topicBlsToExecutionChangeSuffix
 
-# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/phase0/validator.md#broadcast-attestation
+# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.10/specs/phase0/validator.md#broadcast-attestation
 func compute_subnet_for_attestation*(
     committees_per_slot: uint64, slot: Slot, committee_index: CommitteeIndex):
     SubnetId =
@@ -163,7 +164,8 @@ func getDiscoveryForkID*(cfg: RuntimeConfig,
 type GossipState* = set[ConsensusFork]
 func getTargetGossipState*(
     epoch, ALTAIR_FORK_EPOCH, BELLATRIX_FORK_EPOCH, CAPELLA_FORK_EPOCH,
-    DENEB_FORK_EPOCH: Epoch, ELECTRA_FORK_EPOCH: Epoch, isBehind: bool):
+    DENEB_FORK_EPOCH, ELECTRA_FORK_EPOCH,  FULU_FORK_EPOCH: Epoch,
+    isBehind: bool):
     GossipState =
   if isBehind:
     return {}
@@ -172,6 +174,7 @@ func getTargetGossipState*(
   doAssert CAPELLA_FORK_EPOCH >= BELLATRIX_FORK_EPOCH
   doAssert DENEB_FORK_EPOCH >= CAPELLA_FORK_EPOCH
   doAssert ELECTRA_FORK_EPOCH >= DENEB_FORK_EPOCH
+  doAssert FULU_FORK_EPOCH >= ELECTRA_FORK_EPOCH
 
   # https://github.com/ethereum/consensus-specs/issues/2902
   # Don't care whether ALTAIR_FORK_EPOCH == BELLATRIX_FORK_EPOCH or
@@ -199,13 +202,15 @@ func getTargetGossipState*(
   maybeIncludeFork(
     ConsensusFork.Deneb,     DENEB_FORK_EPOCH,     ELECTRA_FORK_EPOCH)
   maybeIncludeFork(
-    ConsensusFork.Electra,   ELECTRA_FORK_EPOCH,   FAR_FUTURE_EPOCH)
+    ConsensusFork.Electra,   ELECTRA_FORK_EPOCH,   FULU_FORK_EPOCH)
+  maybeIncludeFork(
+    ConsensusFork.Electra,   FULU_FORK_EPOCH,   FAR_FUTURE_EPOCH)
 
   doAssert len(targetForks) <= 2
   targetForks
 
 func nearSyncCommitteePeriod*(epoch: Epoch): Opt[uint64] =
-  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/altair/validator.md#sync-committee-subnet-stability
+  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.10/specs/altair/validator.md#sync-committee-subnet-stability
   if epoch.is_sync_committee_period():
     return Opt.some 0'u64
   let epochsBefore =
@@ -224,7 +229,7 @@ func getSyncSubnets*(
     if not nodeHasPubkey(pubkey):
       continue
 
-    # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/altair/validator.md#broadcast-sync-committee-message
+    # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.10/specs/altair/validator.md#broadcast-sync-committee-message
     # The first quarter of the pubkeys map to subnet 0, the second quarter to
     # subnet 1, the third quarter to subnet 2 and the final quarter to subnet
     # 3.
@@ -234,3 +239,13 @@ func getSyncSubnets*(
 iterator blobSidecarTopics*(forkDigest: ForkDigest): string =
   for subnet_id in BlobId:
     yield getBlobSidecarTopic(forkDigest, subnet_id)
+
+# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.10/specs/fulu/p2p-interface.md#data_column_sidecar_subnet_id
+func getDataColumnSidecarTopic*(forkDigest: ForkDigest,
+                                subnet_id: uint64): string =
+  eth2Prefix(forkDigest) & "data_column_sidecar_" & $subnet_id & "/ssz_snappy"
+
+iterator dataColumnSidecarTopics*(forkDigest: ForkDigest,
+                                  targetSubnetCount: uint64): string =
+  for subnet_id in 0'u64..<targetSubnetCount:
+    yield getDataColumnSidecarTopic(forkDigest, subnet_id)
